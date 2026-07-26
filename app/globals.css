@@ -9,7 +9,7 @@ a { color: inherit; text-decoration: none; }
 
 .canvas { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); position: relative; isolation: isolate; overflow: hidden; background: var(--paper); }
 .grain-overlay { position: fixed; inset: 0; z-index: 10; overflow: hidden; pointer-events: none; }
-.grain-overlay__texture { position: absolute; top: -100%; left: -100%; width: 300%; height: 300%; background: url("/noise.svg") repeat; background-size: 11.25rem; opacity: .12; animation: grain-dissolve 8s steps(10) infinite; }
+.grain-overlay__texture { position: absolute; top: -100%; left: -100%; width: 300%; height: 300%; background: url("/noise.svg") repeat; background-size: 11.25rem; opacity: .12; animation: grain-dissolve 16s steps(10) infinite; }
 
 @keyframes grain-dissolve {
   0% { transform: translate(0); }
