@@ -1,13 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import Image from "next/image";
 import { GlassPanel } from "./components/GlassPanel";
-import korvesaLogo from "C:/Users/yee/Downloads/LANDrop/Asset 2.svg";
+import { PixelBleedFrame } from "./components/PixelBleedFrame";
+import { TeamCard } from "./components/TeamCard";
 
 const sections = ["The Gap", "Our Mission", "Advantage", "Economics", "The Team"] as const;
 type SectionName = (typeof sections)[number];
+type NavigationDirection = "previous" | "next";
 
-const sectionId = (section: string) => section.toLowerCase().replaceAll(" ", "-");
+const RAIL_DURATION_MS = 2000;
+const INITIAL_STAGE_STYLE = {
+  "--active-slide": 0,
+  "--slide-count": sections.length,
+} as CSSProperties;
+
+const sectionId = (section: SectionName) => section.toLowerCase().replaceAll(" ", "-");
 
 const sectionContent: Record<SectionName, readonly string[]> = {
   "The Gap": [
@@ -106,33 +115,113 @@ function GapSlide() {
   );
 }
 
+function TeamSlide() {
+  return (
+    <div className="team-portraits" aria-label="Korvesa team portraits">
+      <div className="team-member team-member--yvonne">
+        <PixelBleedFrame alt="Yvonne" src="/team-00005.png" />
+        <TeamCard alt="Yvonne team profile" variant="yvonne" />
+      </div>
+      <div className="team-member team-member--nazry">
+        <PixelBleedFrame alt="Nazry" src="/team-00006.png" />
+        <TeamCard alt="Nazry team profile" variant="nazry" />
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [activeSection, setActiveSection] = useState<SectionName>("The Gap");
+  const [pressedDirection, setPressedDirection] = useState<NavigationDirection | null>(null);
   const activeIndex = sections.indexOf(activeSection);
-  const [railProgress, setRailProgress] = useState(0);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const sceneRefs = useRef<Array<HTMLElement | null>>([]);
   const railProgressRef = useRef(0);
+
+  const moveSection = useCallback((direction: NavigationDirection) => {
+    setActiveSection((currentSection) => {
+      const currentIndex = sections.indexOf(currentSection);
+      const offset = direction === "next" ? 1 : -1;
+      const nextIndex = Math.max(0, Math.min(sections.length - 1, currentIndex + offset));
+      return sections[nextIndex];
+    });
+  }, []);
+
+  const navigateSection = useCallback((direction: NavigationDirection) => {
+    moveSection(direction);
+  }, [moveSection]);
+
+  useEffect(() => {
+    const isTextInput = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName));
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTextInput(event.target)) return;
+
+      const direction = event.key === "ArrowLeft"
+        ? "previous"
+        : event.key === "ArrowRight"
+          ? "next"
+          : null;
+      if (!direction) return;
+
+      event.preventDefault();
+      setPressedDirection(direction);
+      if (!event.repeat) navigateSection(direction);
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        setPressedDirection(null);
+      }
+    };
+    const onWindowBlur = () => setPressedDirection(null);
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
+    };
+  }, [activeSection, navigateSection]);
 
   useEffect(() => {
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const from = railProgressRef.current;
     const to = activeIndex;
 
+    const setRailPosition = (progress: number) => {
+      railProgressRef.current = progress;
+      stageRef.current?.style.setProperty("--active-slide", String(progress));
+      sceneRefs.current.forEach((scene, index) => {
+        if (!scene) return;
+        const offset = index - progress;
+        const dropDistance =
+          offset < 0
+            ? Math.min(-offset, 1)
+            : offset > 1
+              ? Math.min(offset - 1, 1)
+              : 0;
+        scene.style.transform = `translateY(${dropDistance * 100}%)`;
+      });
+    };
+
     if (reduceMotion || from === to) {
-      railProgressRef.current = to;
-      setRailProgress(to);
+      setRailPosition(to);
       return;
     }
 
-    const duration = 2000;
     const startedAt = performance.now();
     let frame = 0;
 
     const animate = (now: number) => {
-      const elapsed = Math.min((now - startedAt) / duration, 1);
+      const elapsed = Math.min((now - startedAt) / RAIL_DURATION_MS, 1);
       const eased = (1 - Math.cos(Math.PI * elapsed)) / 2;
-      const next = from + (to - from) * eased;
-      railProgressRef.current = next;
-      setRailProgress(next);
+      setRailPosition(from + (to - from) * eased);
       if (elapsed < 1) frame = requestAnimationFrame(animate);
     };
 
@@ -142,59 +231,130 @@ export default function Home() {
 
   return (
     <main>
-      <div className="grain-overlay" aria-hidden="true">
-        <div className="grain-overlay__texture" />
-      </div>
       <div className="canvas">
-        <GlassPanel className="intro-tile" aria-labelledby="intro-title" restingX={0.433}>
+        <GlassPanel className="intro-tile" aria-labelledby="intro-title">
           <div className="intro-copy intro-brand">
-            <img className="intro-logo" src={korvesaLogo.src} alt="Korvesa" />
+            <Image
+              className="intro-logo"
+              src="/korvesa-logo.svg"
+              alt="Korvesa"
+              width={250}
+              height={42}
+              priority
+            />
             <p id="intro-title" className="intro-tagline">Low Altitude Economy Autonomous Network</p>
           </div>
 
           <nav className="section-nav" aria-label="Page sections">
-            <ol>
+            <div className="section-nav__track">
               <span className="nav-marker" aria-hidden="true" style={{ "--active-index": activeIndex } as CSSProperties}>{"{{ You’re Here }}"}</span>
-              {sections.map((section) => {
-                const active = activeSection === section;
+              <ol>
+                {sections.map((section) => {
+                  const active = activeSection === section;
+                  return (
+                    <li className={active ? "is-active" : ""} key={section}>
+                      <a
+                        href={`#${sectionId(section)}`}
+                        aria-current={active ? "location" : undefined}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          setActiveSection(section);
+                        }}
+                      >
+                        {section}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+            <div className="nav-controls" aria-label="Slide controls">
+              <p>∷ Navigate with arrow keys on keyboard ∷</p>
+              {([
+                { direction: "previous", label: "Previous section" },
+                { direction: "next", label: "Next section" },
+              ] as const).map(({ direction, label }) => {
+                const pressed = pressedDirection === direction;
                 return (
-                  <li className={active ? "is-active" : ""} key={section}>
-                    <a
-                      href={`#${sectionId(section)}`}
-                      aria-current={active ? "location" : undefined}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        setActiveSection(section);
-                      }}
-                    >
-                      {section}
-                    </a>
-                  </li>
+                  <button
+                    className={`nav-key nav-key--${direction}`}
+                    type="button"
+                    aria-label={label}
+                    aria-pressed={pressed}
+                    key={direction}
+                    onClick={() => navigateSection(direction)}
+                    onPointerDown={() => setPressedDirection(direction)}
+                    onPointerUp={() => setPressedDirection(null)}
+                    onPointerLeave={() => setPressedDirection(null)}
+                    onPointerCancel={() => setPressedDirection(null)}
+                  >
+                    <Image
+                      className="nav-key__asset"
+                      src={pressed ? "/arrow-key-pressed.svg" : "/arrow-key.svg"}
+                      alt=""
+                      width={300}
+                      height={300}
+                    />
+                  </button>
                 );
               })}
-            </ol>
+            </div>
           </nav>
+          <div className="drone-graphic" aria-label="Korvesa autonomous network diagram">
+            <Image
+              className="drone-graphic__background"
+              src="/drone-background.svg"
+              alt=""
+              aria-hidden="true"
+              width={356}
+              height={119}
+            />
+            <Image
+              className="drone-graphic__floating"
+              src="/drone-floating.svg"
+              alt=""
+              aria-hidden="true"
+              width={150}
+              height={112}
+            />
+          </div>
         </GlassPanel>
 
-        <section className="tile statement-tile" aria-label="Korvesa section slides">
-          <div className="why-stage" style={{ "--active-slide": railProgress, "--slide-count": sections.length } as CSSProperties}>
+        <section
+          className="tile statement-tile"
+          aria-label="Korvesa section slides"
+          tabIndex={0}
+        >
+          <div ref={stageRef} className="why-stage" style={INITIAL_STAGE_STYLE}>
             <div className="why-track">
               {sections.map((section, index) => {
-                const offset = index - railProgress;
-                const dropDistance = offset < 0
-                  ? Math.min(-offset, 1)
-                  : offset > 1
-                    ? Math.min(offset - 1, 1)
-                    : 0;
-
                 return (
                   <article
-                    className="why-scene"
+                    ref={(scene) => {
+                      sceneRefs.current[index] = scene;
+                    }}
+                    className={`why-scene${section === "The Team" ? " why-scene--team" : ""}`}
                     aria-hidden={section !== activeSection}
                     key={section}
-                    style={{ transform: `translateY(${dropDistance * 100}%)`, zIndex: sections.length - index }}
+                    style={{
+                      transform: `translateY(${index > 1 ? 100 : 0}%)`,
+                      zIndex: sections.length - index,
+                    }}
                   >
                     {section === "The Gap" ? <GapSlide /> : null}
+                    {section === "Economics" ? (
+                      <div className="economic-slide" aria-label="Economics slide">
+                        <object
+                          className="economic-slide__graph"
+                          aria-label="Korvesa economics graph"
+                          data="/economic-graph.svg"
+                          type="image/svg+xml"
+                        >
+                          Korvesa economics graph
+                        </object>
+                      </div>
+                    ) : null}
+                    {section === "The Team" ? <TeamSlide /> : null}
                   </article>
                 );
               })}
@@ -202,15 +362,12 @@ export default function Home() {
           </div>
         </section>
 
-        <GlassPanel className="brand-tile" aria-labelledby="brand-title" restingX={-0.433}>
+        <GlassPanel className="brand-tile" aria-labelledby="brand-title">
           <header>
             <h2 id="brand-title">{activeSection}</h2>
           </header>
           <div className="brand-section-copy">
             {sectionContent[activeSection].map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-          </div>
-          <div className="network-graphic">
-            <img src="/korvesa-network.svg" alt="Korvesa autonomous network diagram" />
           </div>
         </GlassPanel>
       </div>

@@ -10,8 +10,8 @@ import {
 
 const glassbezelProperties = {
   glassOpacity: 28,
-  glassColor: "#0d0d0e",
-  bezelColor: "#edebe5",
+  glassColor: "#312F31",
+  bezelColor: "#EBE1D2",
   glassBlur: 14,
   refraction: 0.55,
   edgeHighlight: 35,
@@ -19,7 +19,7 @@ const glassbezelProperties = {
   outlineBrightness: 3,
   shadowOpacity: 15,
   shadowSpread: 70,
-  layerDepth: 50,
+  layerDepth: 20,
   parallaxRange: 16,
   lerpSpeed: 0.01,
   darkSideSaturation: 29,
@@ -80,6 +80,28 @@ function hexToHsl(hex: string): Hsl {
   };
 }
 
+const bezelHsl = hexToHsl(glassbezelProperties.bezelColor);
+const outlineOpacity = Math.min(
+  0.85,
+  glassbezelProperties.glassOpacity / 100 + 0.45,
+);
+const basePanelStyle: GlassStyle = {
+  "--glass-opacity": String(glassbezelProperties.glassOpacity / 100),
+  "--glass-color": glassbezelProperties.glassColor,
+  "--glass-rgb": "49 47 49",
+  "--glass-blur": `${glassbezelProperties.glassBlur}px`,
+  "--refraction-blur": `${glassbezelProperties.refraction * 8}px`,
+  "--refraction-saturation": String(1 + glassbezelProperties.refraction * 0.2),
+  "--outline-stroke": `${glassbezelProperties.outlineStroke}px`,
+  "--outline-color": `hsla(${bezelHsl.hue}, ${bezelHsl.saturation}%, ${Math.min(100, bezelHsl.lightness + glassbezelProperties.outlineBrightness)}%, ${outlineOpacity})`,
+  "--shadow-opacity": String(glassbezelProperties.shadowOpacity / 100),
+  "--shadow-spread": `${glassbezelProperties.shadowSpread}px`,
+  "--depth": `${glassbezelProperties.layerDepth}px`,
+  "--front-scale": String(
+    (sourcePerspective - glassbezelProperties.layerDepth) / sourcePerspective,
+  ),
+};
+
 function cornerCenter(element: HTMLElement, boxBounds: DOMRect): Point {
   const bounds = element.getBoundingClientRect();
   return {
@@ -90,35 +112,26 @@ function cornerCenter(element: HTMLElement, boxBounds: DOMRect): Point {
 
 export interface GlassPanelProps extends Omit<ComponentPropsWithoutRef<"section">, "children"> {
   children: ReactNode;
+  layerDepth?: number;
+  maxMovementX?: number;
   restingX?: number;
 }
 
 export function GlassPanel({
   children,
   className = "",
+  layerDepth = glassbezelProperties.layerDepth,
   style,
-  restingX = 0.64,
+  restingX = 0,
+  maxMovementX = 0.44,
   ...sectionProps
 }: GlassPanelProps) {
   const surfaceRef = useRef<HTMLElement>(null);
-  const glassColor = hexToHsl(glassbezelProperties.bezelColor);
-  const outlineOpacity = Math.min(0.85, glassbezelProperties.glassOpacity / 100 + 0.45);
   const panelStyle: GlassStyle = {
+    ...basePanelStyle,
+    "--depth": `${layerDepth}px`,
+    "--front-scale": String((sourcePerspective - layerDepth) / sourcePerspective),
     ...style,
-    "--glass-opacity": String(glassbezelProperties.glassOpacity / 100),
-    "--glass-color": glassbezelProperties.glassColor,
-    "--glass-rgb": "13 13 14",
-    "--glass-blur": `${glassbezelProperties.glassBlur}px`,
-    "--refraction-blur": `${glassbezelProperties.refraction * 8}px`,
-    "--refraction-saturation": String(1 + glassbezelProperties.refraction * 0.2),
-    "--outline-stroke": `${glassbezelProperties.outlineStroke}px`,
-    "--outline-color": `hsla(${glassColor.hue}, ${glassColor.saturation}%, ${Math.min(100, glassColor.lightness + glassbezelProperties.outlineBrightness)}%, ${outlineOpacity})`,
-    "--shadow-opacity": String(glassbezelProperties.shadowOpacity / 100),
-    "--shadow-spread": `${glassbezelProperties.shadowSpread}px`,
-    "--depth": `${glassbezelProperties.layerDepth}px`,
-    "--front-scale": String(
-      (sourcePerspective - glassbezelProperties.layerDepth) / sourcePerspective,
-    ),
   };
 
   useEffect(() => {
@@ -153,6 +166,7 @@ export function GlassPanel({
 
     const state = { targetX: restingX, currentX: restingX };
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let surfaceBounds = surface.getBoundingClientRect();
     let frame = 0;
 
     const drawFaces = () => {
@@ -195,7 +209,7 @@ export function GlassPanel({
           glassbezelProperties.darkSideSaturation +
           (glassbezelProperties.lightSideSaturation - glassbezelProperties.darkSideSaturation) * amount;
         const saturation =
-          configuredSaturation * (glassColor.saturation / 100);
+          configuredSaturation * (bezelHsl.saturation / 100);
         const baseLightness =
           glassbezelProperties.darkTealBrightness +
           (glassbezelProperties.lightTealBrightness - glassbezelProperties.darkTealBrightness) * amount;
@@ -208,8 +222,8 @@ export function GlassPanel({
           Math.max(configuredOpacity, glassbezelProperties.glassOpacity / 100 + 0.1),
         );
         return {
-          fill: `hsla(${glassColor.hue}, ${saturation}%, ${lightness}%, ${opacity})`,
-          outline: `hsla(${glassColor.hue}, ${saturation}%, ${Math.min(100, lightness + glassbezelProperties.outlineBrightness)}%, ${opacity})`,
+          fill: `hsla(${bezelHsl.hue}, ${saturation}%, ${lightness}%, ${opacity})`,
+          outline: `hsla(${bezelHsl.hue}, ${saturation}%, ${Math.min(100, lightness + glassbezelProperties.outlineBrightness)}%, ${opacity})`,
         };
       };
 
@@ -242,11 +256,19 @@ export function GlassPanel({
     };
 
     const render = () => {
+      frame = 0;
+
       if (reducedMotion.matches) {
+        state.targetX = restingX;
         state.currentX = restingX;
       } else {
-        state.currentX +=
-          (state.targetX - state.currentX) * glassbezelProperties.lerpSpeed;
+        const difference = state.targetX - state.currentX;
+        const subpixelDifference =
+          Math.abs(difference) * glassbezelProperties.parallaxRange;
+        state.currentX =
+          subpixelDifference <= 0.1
+            ? state.targetX
+            : state.currentX + difference * glassbezelProperties.lerpSpeed;
       }
 
       box.style.setProperty(
@@ -260,21 +282,31 @@ export function GlassPanel({
       box.style.setProperty("--rot-y", `${state.currentX * 10}deg`);
       drawFaces();
 
-      if (!reducedMotion.matches) {
+      if (!reducedMotion.matches && state.currentX !== state.targetX) {
         frame = window.requestAnimationFrame(render);
       }
     };
 
+    const requestRender = () => {
+      if (frame === 0) frame = window.requestAnimationFrame(render);
+    };
+
+    const setTargetX = (targetX: number) => {
+      if (state.targetX === targetX && state.currentX === targetX) return;
+      state.targetX = targetX;
+      requestRender();
+    };
+
     const onPointerMove = (event: PointerEvent) => {
       if (event.pointerType === "touch" || reducedMotion.matches) return;
-      const bounds = surface.getBoundingClientRect();
+      const bounds = surfaceBounds;
       const nearestX = Math.max(bounds.left, Math.min(event.clientX, bounds.right));
       const nearestY = Math.max(bounds.top, Math.min(event.clientY, bounds.bottom));
       const distance = Math.hypot(event.clientX - nearestX, event.clientY - nearestY);
       const proximityRadius = Math.min(bounds.width, bounds.height) / 2;
 
       if (distance > proximityRadius) {
-        state.targetX = restingX;
+        setTargetX(restingX);
         return;
       }
 
@@ -282,25 +314,33 @@ export function GlassPanel({
         -1,
         Math.min(1, (event.clientX - (bounds.left + bounds.width / 2)) / (bounds.width / 2)),
       );
-      const movementLimit = Math.abs(restingX);
-      state.targetX = Math.max(
-        -movementLimit,
-        Math.min(movementLimit, normalized * movementLimit),
+      setTargetX(
+        Math.max(
+          -maxMovementX,
+          Math.min(maxMovementX, normalized * maxMovementX),
+        ),
       );
     };
     const returnToRest = () => {
-      state.targetX = restingX;
+      setTargetX(restingX);
     };
     const onPointerOut = (event: PointerEvent) => {
       if (event.relatedTarget === null) returnToRest();
     };
-    const resizeObserver = new ResizeObserver(drawFaces);
+    const onMotionPreferenceChange = () => {
+      setTargetX(restingX);
+    };
+    const resizeObserver = new ResizeObserver(() => {
+      surfaceBounds = surface.getBoundingClientRect();
+      requestRender();
+    });
 
     resizeObserver.observe(surface);
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     document.addEventListener("pointerout", onPointerOut);
     window.addEventListener("blur", returnToRest);
-    render();
+    reducedMotion.addEventListener("change", onMotionPreferenceChange);
+    requestRender();
 
     return () => {
       window.cancelAnimationFrame(frame);
@@ -308,8 +348,9 @@ export function GlassPanel({
       window.removeEventListener("pointermove", onPointerMove);
       document.removeEventListener("pointerout", onPointerOut);
       window.removeEventListener("blur", returnToRest);
+      reducedMotion.removeEventListener("change", onMotionPreferenceChange);
     };
-  }, [glassColor.hue, glassColor.lightness, glassColor.saturation, restingX]);
+  }, [maxMovementX, restingX]);
 
   const corners = (
     <>

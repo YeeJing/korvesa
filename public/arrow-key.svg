@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="controls" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #f2d2bf;
+      }
+
+      .cls-2 {
+        fill: none;
+        stroke: #f2d2bf;
+        stroke-miterlimit: 10;
+        stroke-width: .75px;
+      }
+    </style>
+  </defs>
+  <path class="cls-2" d="m123,120h54l3,3v54l-3,3h-54l-3-3v-54l3-3Z"/>
+  <g>
+    <path class="cls-1" d="m140.9154,161.7725v-23.545c0-.1657.1343-.3.3-.3h2.3577c.1657,0,.3.1343.3.3v9.2634l1,1h19.8269c.1657,0,.3.1343.3.3v2.4181c0,.1657-.1343.3-.3.3h-19.8269l-1,1v9.2634c0,.1657-.1343.3-.3.3h-2.3577c-.1657,0-.3-.1343-.3-.3Z"/>
+    <rect class="cls-1" x="135" y="137.9275" width="2.9577" height="24.145" rx=".3" ry=".3"/>
+  </g>
+</svg>
